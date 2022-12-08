@@ -5,7 +5,9 @@ This repo contains the code to use the Bayesian Neural Networks for Sentinel-3 O
 
 BNNs were developed for oligotrophic and mesotrophic lakes (**maximum chla 68 $\text{mg m}^{-3}$**) and for **optical water types (OWTs) [2, 3, 4, 5, 9]** described in [Spyrakos et al. (2018)](https://aslopubs.onlinelibrary.wiley.com/doi/full/10.1002/lno.10674). Usage outside of this application scope is not intended. The OWT classification is implemented in this repository and an OWT flag generated for each input observation.
 
-![Fig. 14.](/.repo/figure_14.jpg)OLCI BNN chla and uncertainty products over southern New Zealand, 9th of February 2020. Chla was measured in situ at the location of Lake Hawea (star symbol) as 0.89 mg m${^−3}$ during the overpass.
+| ![Alt Text](/.repo/figure_14.jpg)| 
+|:--:| 
+| *Figure 14 from the manuscript: OLCI BNN chla and uncertainty products over southern New Zealand, 9th of February 2020. Chla was measured in situ at the location of Lake Hawea (star symbol) as 0.89 mg^m−3 during the overpass.* |
 
 # Installation
 
@@ -23,7 +25,7 @@ And install this repository into the generated environment:
 
 The code can then be executed using `example_usage.py`.
 
-Alternatively see bnn_requirements.txt if you want to use the repo outside of Anaconda (not tested).
+Alternatively see `bnn_requirements.txt` if you want to use the repo outside of Anaconda (not tested).
 
 ## Usage:
 
