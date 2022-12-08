@@ -21,7 +21,7 @@ Then activate the environment:
 
 And install this repository into the generated environment:
 
-`pip install git+https://github.com/example_user/my-repo.git`
+`pip install git+https://github.com/mowerther/BNN_2022.git`
 
 The code can then be executed using `example_usage.py`.
 
