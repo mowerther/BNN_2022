@@ -76,15 +76,16 @@ def owt_flagging(owt_rrs: pd.DataFrame, input_dataset: pd.DataFrame, sensor: str
         The returned dataframed is subsequently normalised.
     
     Raises:
-        ValueError: If the input dataset contains NaN values. 
+        ValueError: If the input dataset contains NaN values in the input sensor columns.
         
     """
-    # If it does, raise a ValueError
-    if input_dataset.isnull().values.any():
-        raise ValueError('input_dataset contains NaN values. Please treat/remove the corresponding observation.')
-
-    # Select the sensor configuration for the given sensor
+     # Select the sensor configuration for the given sensor
     sensor_bands = meta.get_sensor_config(sensor)
+    
+    # If it does, raise a ValueError
+    if input_dataset[sensor_bands].isnull().values.any():
+        raise ValueError('The input dataset contains NaN values in one or more of the sensor columns specified in sensor_meta_info.py. Please treat/remove the corresponding observation.')
+
     owt_cols = ['wl'] + sensor_bands
 
     # Select the specified columns from the owt_rrs and input_dataset data frames
@@ -111,7 +112,7 @@ def owt_flagging(owt_rrs: pd.DataFrame, input_dataset: pd.DataFrame, sensor: str
     print('OWT flagging complete. New OWT columns "owt_class" and "owt_flag" added to input dataframe.')
     return input_dataset
 
-def normalise_input(df: pd.DataFrame, sensor: str, cwd_path: str) -> pd.DataFrame:
+def normalise_input(df: pd.DataFrame, sensor: str, cwd_path: str, reset_index:bool=True) -> pd.DataFrame:
     """
     Sets all negative values to 0, and uses a scaler/transformer to apply the 0-1 normalisation to stay within the scale of training dataset.
     This normalisation is independent of the standardisation that is specific to the OWT classification.
@@ -119,14 +120,35 @@ def normalise_input(df: pd.DataFrame, sensor: str, cwd_path: str) -> pd.DataFram
     Args:
         df: A DataFrame containing the input data.
         sensor: A string representing the satellite sensor.
+        reset_index: A boolean indicating whether the index of the DataFrame should be reset to a monotonically increasing sequence (by 1) starting from 0. Defaults to True.
         
     Returns:
         A DataFrame with the same columns as the input DataFrame, but with normalised values and an additional "is_negative" column.
 
     Raises:
+        ValueError: If the index in df is not strictly increasing by 1.
         UserWarning: If any of the data contains negative values, a warning is raised with
         the index of the specific row containing the negative value.
     """
+    # Check if reset_index is False
+    if not reset_index:
+        # Don't reset the index of df
+        pass
+    else:
+        # Reset the index of df
+        df = df.reset_index(drop=True)
+        print('Index of input "df" reset.')
+
+    # Check index of df
+    # Get the index of the DataFrame as array
+    index = df.index.to_numpy()
+
+    # Check whether the difference between consecutive indices is always 1
+    differences = np.diff(index)
+    if not np.all(differences == 1):
+        raise ValueError("Error: Index is not strictly increasing. It has to be increasing by 1. You may just use use the reset_index argument of this function (default: True) to achieve this.")
+
+    # continue code after index checks
     # get sensor configuration
     input_bands = meta.get_sensor_config(sensor)
     input_bands_int = np.array([int(x) for x in input_bands])
