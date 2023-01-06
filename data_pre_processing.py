@@ -216,7 +216,7 @@ def normalise_input(df: pd.DataFrame, sensor: str, cwd_path: str, reset_index:bo
     df_norm = pd.DataFrame(data=normalised, columns=string_norm)
 
     # Include the additional columns from the input DataFrame and add a column where negative
-    df_preprocessed = df_norm.join(df).assign(is_negative=is_negative.where(is_negative, 0))
+    df_preprocessed = df_norm.join(df).assign(is_negative=is_negative.astype(int))
 
     print('Normalisation and treating of negative values complete. New columns "is_negative" added to the dataframe.')
     return df_preprocessed
