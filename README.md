@@ -7,7 +7,7 @@ BNNs were developed for oligotrophic and mesotrophic lakes (**maximum chla 68 $\
 
 | ![Alt Text](/.repo/figure_14.jpg)| 
 |:--:| 
-| *Figure 14 from the manuscript: OLCI BNN chla and uncertainty products over southern New Zealand, 9th of February 2020. Chla was measured in situ at the location of Lake Hawea (star symbol) as 0.89 $\text{mg m}^{-3}$ during the overpass.* |
+| *Figure 14 from the manuscript: OLCI BNN chla and uncertainty products over southern New Zealand, 9th of February 2020. Chla was measured in situ at the location of Lake Hawea (star symbol) as 0.89 during the overpass.* |
 
 # Installation
 
