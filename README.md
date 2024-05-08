@@ -7,20 +7,19 @@ BNNs were developed for oligotrophic and mesotrophic lakes (**maximum chla 68 $\
 
 | ![Alt Text](/.repo/figure_14.jpg)| 
 |:--:| 
-| *Figure 14 from the manuscript: OLCI BNN chla and uncertainty products over southern New Zealand, 9th of February 2020. Chla was measured in situ at the location of Lake Hawea (star symbol) as 0.89 mg^m−3 during the overpass.* |
+| *Figure 14 from the manuscript: OLCI BNN chla and uncertainty products over southern New Zealand, 9th of February 2020. Chla was measured in situ at the location of Lake Hawea (star symbol) as 0.89 $\text{mg m}^{-3}$ during the overpass.* |
 
 # Installation
 
 You want to have [Anaconda](https://www.anaconda.com/) installed and use a dedicated Anaconda environment. To install all required packages and versions, follow these steps (recommended):
 
 Clone this repository (e.g., through GitHub Desktop). Alternatively download the repository. <br>
-Open your shell (e.g. CMD) and navigate to the directory where you cloned or downloaded the repository to, for example: <br>
-cd C:\github_repos\BNN_2022<br>
+Open your shell (e.g. CMD) and navigate to the directory where you cloned or downloaded the repository to, for example: cd C:\github_repos\BNN_2022<br>
 
 Then: <br>
 `conda create -n "bnn_2022_env" python=3.8.15`. This creates a fresh conda environment with the correct Python version to load the BNN models.
-Activate it: `conda activate bnn_2022_env`. 
-Then: pip install pandas tqdm tensorflow tensorflow_probability numpy uncertainty-toolbox xarray matplotlib
+Activate it: `conda activate bnn_2022_env`. <br>
+Then: `pip install pandas tqdm tensorflow tensorflow_probability numpy uncertainty-toolbox xarray matplotlib`.
 This installes all the repository requirements into your "bnn_2022_env" environment. 
 You can then use any Python IDE, such as VSCode, activate/set the conda environment “bnn_2022_env” and navigate to the folder of this repository on your local drive. 
 
