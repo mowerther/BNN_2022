@@ -11,30 +11,25 @@ BNNs were developed for oligotrophic and mesotrophic lakes (**maximum chla 68 $\
 
 # Installation
 
-You want to have [Anaconda](https://www.anaconda.com/) installed and use a dedicated Anaconda environment for this code. To install all required packages and versions, follow these steps (recommended):
+You want to have [Anaconda](https://www.anaconda.com/) installed and use a dedicated Anaconda environment. To install all required packages and versions, follow these steps (recommended):
 
 Clone this repository (e.g., through GitHub Desktop). Alternatively download the repository. <br>
-Open your cmd and navigate to the directory where you cloned or downloaded the repository to, for example: <br>
+Open your shell (e.g. CMD) and navigate to the directory where you cloned or downloaded the repository to, for example: <br>
 cd C:\github_repos\BNN_2022<br>
 
 Then: <br>
 `conda create -n "bnn_2022_env" python=3.8.15`. This creates a fresh conda environment with the correct Python version to load the BNN models.
-Activate it: `conda activate bnn_2022_env`. And update it using the bnn_requirements file specific to this repository: `conda env update --file bnn_requirements.yml`<br>
-
+Activate it: `conda activate bnn_2022_env`. 
+Then: pip install pandas tqdm tensorflow tensorflow_probability numpy uncertainty-toolbox xarray matplotlib
 This installes all the repository requirements into your "bnn_2022_env" environment. 
-You can then use any Python IDE, such as VSCode, activate/set the conda environment “bnn_2022_env”, and run `example_usage.py` that includes the main script structure.
-
-Optional (not tested): <br>
-`pip install git+https://github.com/mowerther/BNN_2022.git` is enabled but does not automatically install the requirements, which you need to then install using the bnn_requirements.yml or .txt file available here.
+You can then use any Python IDE, such as VSCode, activate/set the conda environment “bnn_2022_env” and navigate to the folder of this repository on your local drive. 
 
 ## Usage
 
-To use this code, you will need a .csv dataset with band configurations as detailed in `sensor_meta_info.py`. You can see an example of the correct file format in `example_data.csv`, which can also be used to run the BNN models and generate outputs using `example_usage.py`.
+The scripts `bnn_insitu_dataframe.py` and `bnn_netcdf_dataset.py` come with example data and necessary processing steps. I suggest to try running these successfully before using own data.
 
 The input data from a satellite sensor should be the remote sensing reflectance $(\text{sr}^{-1})$ derived through prior atmospheric correction.
 The BNNs can also be applied to _in situ_ remote sensing reflectance observations that must correspond to the relative spectral response (RSR) of OLCI or MSI S2A/S2B, and measured as or transformed to above-water reflectance. Negative values < 665 nm will be flagged, and a warning issued. The code raises ValueErrors when observations contain NaN values.
-
-Example code for a satellite image will follow later. Just pick the models, follow the structure of the functions and apply it to your image tiles! 
 
 Happy usage!
 Any bugs reported in the issues tab or send me an email directly: mortimer(dot)werther(at)eawag.ch.

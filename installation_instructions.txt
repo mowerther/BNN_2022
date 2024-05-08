@@ -1,0 +1,11 @@
+# 1. create an Anaconda environment (assumes you have Anaconda installed and configured) with mandatory Python 3.8.15, i.e. open your shell and type:
+conda create -n bnn_2022_env python=3.8.15
+# 2. After creation of the environment type:
+conda activate bnn_2022_env
+# 3. When activated: 
+pip install pandas tqdm tensorflow tensorflow_probability numpy uncertainty-toolbox xarray matplotlib
+# Tensorflow and tensorflow_probability have difficulties with conda-forge, thus it's recommended to use pip
+# 4. The BNNs for OLCI and MSI (require Rrs derived through prior AC) can be used with in situ data (i.e. 2D) and satellite data in netcdf format (.nc, i.e. 3D).
+# See bnn_insitu_dataframe.py and bnn_netcdf_dataset.py for details.
+# Good luck!
+ 
