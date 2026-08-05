@@ -1,0 +1,13 @@
+tensorflow==2.18.1
+tensorflow-probability==0.25.0
+tf-keras==2.18.0
+numpy==1.26.4
+scipy==1.14.1
+pandas==3.0.5
+xarray==2026.7.0
+scikit-learn==1.9.0
+h5py==3.16.0
+h5netcdf==1.8.1
+tqdm==4.70.0
+matplotlib==3.11.1
+uncertainty-toolbox==0.1.1

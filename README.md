@@ -17,15 +17,15 @@ Clone this repository (e.g., through GitHub Desktop). Alternatively download the
 Open your shell (e.g. CMD) and navigate to the directory where you cloned or downloaded the repository to, for example: cd C:\github_repos\BNN_2022<br>
 
 Then: <br>
-`conda create -n "bnn_2022_env" python=3.8.15`. This creates a fresh conda environment with the correct Python version to load the BNN models.
+`conda create -n "bnn_2022_env" python=3.12`. This creates a fresh Python 3.12 environment.
 Activate it: `conda activate bnn_2022_env`. <br>
-Then: `pip install pandas tqdm tensorflow tensorflow_probability numpy uncertainty-toolbox xarray matplotlib`.
-This installes all the repository requirements into your "bnn_2022_env" environment. 
+Then: `pip install -r requirements-python-3.12.txt`.
+This installs the tested package versions into the "bnn_2022_env" environment. The original trained models remain unchanged. The current code applies stored fitted scaler parameters with NumPy rather than loading the historical scikit-learn pickle files. The model loader selects legacy Keras before importing TensorFlow; if TensorFlow is imported elsewhere first, set `TF_USE_LEGACY_KERAS=1` before that import.
 You can then use any Python IDE, such as VSCode, activate/set the conda environment “bnn_2022_env” and navigate to the folder of this repository on your local drive. 
 
 ## Usage
 
-The scripts `bnn_insitu_dataframe.py` and `bnn_netcdf_dataset.py` come with example data and necessary processing steps. I suggest to try running these successfully before using own data.
+The scripts `bnn_insitu_dataframe.py` and `bnn_netcdf_dataset.py` come with example data and necessary processing steps. Run both the supplied in situ and netCDF examples after installation before using your own data.
 
 The input data from a satellite sensor should be the remote sensing reflectance $(\text{sr}^{-1})$ derived through prior atmospheric correction.
 The BNNs can also be applied to _in situ_ remote sensing reflectance observations that must correspond to the relative spectral response (RSR) of OLCI or MSI S2A/S2B, and measured as or transformed to above-water reflectance. Negative values < 665 nm will be flagged, and a warning issued. The code raises ValueErrors when observations contain NaN values.
