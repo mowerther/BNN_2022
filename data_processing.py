@@ -1,17 +1,174 @@
 from typing import Union
+import json
 import math
 from math import pi
 import os
+os.environ['TF_USE_LEGACY_KERAS'] = '1'
+from pathlib import Path
+
+import h5py
 import tensorflow as tf
-import re
+import tensorflow_probability as tfp
 import pandas as pd
 import numpy as np
 import xarray as xr
-from numpy import pi
-import pickle
 import warnings
 import sensor_meta_info as meta
-from model_functions import NLL
+
+
+_SCALER_ARRAY_FIELDS = (
+    'scale',
+    'min',
+    'data_min',
+    'data_max',
+    'data_range',
+)
+
+
+class _CompatibleDistributionLambda(tfp.layers.DistributionLambda):
+    """Reconstruct the Normal output distribution stored by the original models."""
+
+    def __init__(self, **config):
+        layer_config = {
+            key: config[key]
+            for key in ('name', 'trainable', 'dtype')
+            if key in config
+        }
+        super().__init__(
+            make_distribution_fn=lambda parameters: tfp.distributions.Normal(
+                loc=parameters[..., :1],
+                scale=tf.math.exp(parameters[..., 1:]),
+            ),
+            convert_to_tensor_fn=tfp.distributions.Distribution.sample,
+            **layer_config,
+        )
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+
+def load_bnn_model(model_path):
+    """Load an original BNN for inference without its legacy training state."""
+    with h5py.File(model_path, 'r') as model_file:
+        model_config = model_file.attrs['model_config']
+
+    if isinstance(model_config, bytes):
+        model_config = model_config.decode('utf-8')
+
+    model_config = json.loads(model_config)
+    layers = model_config['config']['layers']
+    distribution_layer = layers[-1]
+    output_layer = layers[-2]
+
+    if distribution_layer['class_name'] != 'DistributionLambda':
+        raise ValueError('The final BNN layer must be a DistributionLambda.')
+    if distribution_layer['config'].get('convert_to_tensor_fn') != 'sample':
+        raise ValueError('The final BNN distribution must return samples.')
+    if output_layer['class_name'] != 'Dense':
+        raise ValueError('The layer before the distribution must be Dense.')
+    if output_layer['config'].get('units') != 2:
+        raise ValueError('The final BNN dense layer must have two outputs.')
+
+    distribution_layer['class_name'] = '_CompatibleDistributionLambda'
+    distribution_layer['config'] = {
+        key: distribution_layer['config'][key]
+        for key in ('name', 'trainable', 'dtype')
+    }
+    bnn_model = tf.keras.models.model_from_json(
+        json.dumps(model_config),
+        custom_objects={
+            '_CompatibleDistributionLambda': _CompatibleDistributionLambda,
+        },
+    )
+    bnn_model.load_weights(model_path)
+    return bnn_model
+
+
+def load_scaler_parameters(scaler_name, cwd_path):
+    """Load and validate fitted MinMaxScaler parameters from JSON."""
+    parameter_path = Path(cwd_path) / 'scalers' / 'scaler_parameters.json'
+    try:
+        with parameter_path.open(encoding='utf-8') as parameter_file:
+            document = json.load(parameter_file)
+    except FileNotFoundError as error:
+        raise FileNotFoundError(
+            f'Scaler parameters could not be found at {parameter_path}.'
+        ) from error
+
+    if document.get('format_version') != 1:
+        raise ValueError('Unsupported scaler parameter format version.')
+
+    try:
+        stored = document['scalers'][scaler_name]
+    except KeyError as error:
+        raise ValueError(f'Unknown scaler name: {scaler_name}.') from error
+
+    feature_names = tuple(stored.get('feature_names', ()))
+    n_features = stored.get('n_features')
+    if not isinstance(n_features, int) or n_features <= 0:
+        raise ValueError(f'Scaler {scaler_name} has an invalid feature count.')
+    if len(feature_names) != n_features or len(set(feature_names)) != n_features:
+        raise ValueError(f'Scaler {scaler_name} has invalid feature names.')
+    if stored.get('dtype') != 'float64':
+        raise ValueError(f'Scaler {scaler_name} must use float64 parameters.')
+
+    feature_range = np.asarray(stored.get('feature_range'), dtype=np.float64)
+    if feature_range.shape != (2,) or not np.isfinite(feature_range).all():
+        raise ValueError(f'Scaler {scaler_name} has an invalid feature range.')
+
+    parameters = {
+        'feature_names': feature_names,
+        'n_features': n_features,
+        'feature_range': feature_range,
+        'clip': bool(stored.get('clip', False)),
+    }
+    for field in _SCALER_ARRAY_FIELDS:
+        values = np.asarray(stored.get(field), dtype=np.float64)
+        if values.shape != (n_features,):
+            raise ValueError(
+                f'Scaler {scaler_name} field {field} must contain '
+                f'{n_features} values.'
+            )
+        parameters[field] = values
+
+    if not np.isfinite(parameters['scale']).all():
+        raise ValueError(f'Scaler {scaler_name} contains a non-finite scale.')
+    if not np.isfinite(parameters['min']).all():
+        raise ValueError(f'Scaler {scaler_name} contains a non-finite offset.')
+    return parameters
+
+
+def apply_minmax_scaler(input_values, feature_names, scaler_parameters):
+    """Apply validated fitted MinMaxScaler parameters using NumPy."""
+    expected_names = tuple(scaler_parameters['feature_names'])
+    supplied_names = tuple(feature_names)
+    missing = [name for name in expected_names if name not in supplied_names]
+    additional = [name for name in supplied_names if name not in expected_names]
+    if missing:
+        raise ValueError(f'Missing required scaler inputs: {missing}.')
+    if additional:
+        raise ValueError(f'Additional scaler inputs are not permitted: {additional}.')
+    if supplied_names != expected_names:
+        raise ValueError('Scaler inputs must be supplied in the stored feature order.')
+
+    values = np.asarray(input_values, dtype=np.float64)
+    if values.ndim != 2:
+        raise ValueError('Scaler input must be a two-dimensional array.')
+    if values.shape[1] != scaler_parameters['n_features']:
+        raise ValueError(
+            'Scaler input has an incorrect number of variables: '
+            f"expected {scaler_parameters['n_features']}, got {values.shape[1]}."
+        )
+
+    transformed = values * scaler_parameters['scale'] + scaler_parameters['min']
+    if scaler_parameters['clip']:
+        transformed = np.clip(
+            transformed,
+            scaler_parameters['feature_range'][0],
+            scaler_parameters['feature_range'][1],
+        )
+    return transformed
 
 
 def load_datasets(sensor_name, file_name):
@@ -24,14 +181,14 @@ def load_datasets(sensor_name, file_name):
     """
     # Setup directory paths using the current working directory
     cwd = os.getcwd()
-    cwd_system_wide = os.path.join(*cwd.split("/"))
+    cwd_system_wide = cwd
     model_directory = os.path.join(cwd_system_wide, 'bnns')
     data_directory = os.path.join(cwd_system_wide, 'data')
     
     # Load the BNN model
     model_path = f"{model_directory}/BNN_{sensor_name}.h5"
     try:
-        bnn_model = tf.keras.models.load_model(model_path, custom_objects={'NLL': NLL})
+        bnn_model = load_bnn_model(model_path)
         print(f"{sensor_name} BNN model loaded.")
     except Exception as e:
         print(f"Error loading model from {model_path}: {e}")
@@ -322,7 +479,7 @@ def owt_flagging(owt_rrs: pd.DataFrame, input_dataset: Union[pd.DataFrame, xr.Da
         owt_flag = xr.where(np.isin(result, bnn_owts), 0, 1)
 
         # Capture dimension names from input_dataset
-        dims = list(input_dataset.dims.keys())
+        dims = list(input_dataset.sizes.keys())
 
         # Use .data to get the underlying array from 'result' and 'owt_flag'
         input_dataset['owt_class'] = (dims, result.data)
@@ -336,6 +493,7 @@ def owt_flagging(owt_rrs: pd.DataFrame, input_dataset: Union[pd.DataFrame, xr.Da
 def normalise_input(input_dataset: Union[pd.DataFrame, xr.Dataset], data_type: str, sensor: str, scaler_name: str, cwd_path: str, reset_index:bool=True) -> Union[pd.DataFrame, xr.Dataset]:
 
     if data_type == 'in_situ':
+        df = input_dataset
         # Check if reset_index is False
         if not reset_index:
             # Don't reset the index of df
@@ -357,6 +515,11 @@ def normalise_input(input_dataset: Union[pd.DataFrame, xr.Dataset], data_type: s
         # continue code after index checks
         # get sensor configuration
         input_bands = meta.get_sensor_config(sensor)
+        missing_input_bands = [band for band in input_bands if band not in df.columns]
+        if missing_input_bands:
+            raise ValueError(
+                f'Missing required model input variables: {missing_input_bands}.'
+            )
         input_bands_int = np.array([int(x) for x in input_bands])
         
         # separate the wavelengths
@@ -372,7 +535,8 @@ def normalise_input(input_dataset: Union[pd.DataFrame, xr.Dataset], data_type: s
         # the BNNs should not be applied to negative values < 665 nm as there is no training data that covers this.
         
         zeroed = to_zero.mask(to_zero < 0, 0)
-        non_negative = standard.join(zeroed)
+        non_negative = df[input_bands].copy()
+        non_negative.loc[:, zeroed.columns] = zeroed
 
         is_negative = (standard.lt(0) | zeroed.lt(0)).any(axis=1)
 
@@ -388,38 +552,27 @@ def normalise_input(input_dataset: Union[pd.DataFrame, xr.Dataset], data_type: s
             message += str(negative_row)
             warnings.warn(message, UserWarning)
 
-        # Create a dictionary that maps the sensor value to the appropriate suffix value
-        suffix_dict = {
-            'OLCI_all': 's3b',
-            'OLCI_polymer': 's3b',
-            'MSI_s2b': 's2b',
-            'MSI_s2a': 's2a',
-        }
-
-        # Use the dictionary to get the appropriate suffix for the sensor
-        suffix = suffix_dict.get(sensor, '')
-
-        # Create the list of columns used for fitting the normalisation scaler
-        scaler_fitting_cols = meta.get_scaler_config(scaler_name)
-        scaler_fitting_cols = [col[:3] + '_res_' + suffix for col in scaler_fitting_cols]
-        
-        # Create a mapping of columns in the non_negative DataFrame to the fitting columns and rename
-        column_mapping = {col: scaler_fitting_cols[i] for i, col in enumerate(non_negative.columns)}
-        non_negative = non_negative.rename(columns=column_mapping)
-
-        # 0 - 1 normalisation, load the scaler/transformer to bring new input data into the scale of the training dataset
-        try:
-            loaded_scaler = pickle.load(open(cwd_path+'/scalers/'+sensor+'_scaler.sav', 'rb'))
-        except FileNotFoundError:
-            print("Error: The scaler in /BNN_2022/scalers/ could not be found. Please make sure your working directory is the correct repository. Otherwise you can explicitly define it using the cwd_path argument in this function.")
-        # scale the data using the transform method
-        normalised = loaded_scaler.transform(non_negative)
+        scaler_parameters = load_scaler_parameters(scaler_name, cwd_path)
+        if len(input_bands) != scaler_parameters['n_features']:
+            raise ValueError(
+                f'Sensor {sensor} provides {len(input_bands)} model inputs, but '
+                f"scaler {scaler_name} requires {scaler_parameters['n_features']}."
+            )
+        normalised = apply_minmax_scaler(
+            non_negative.to_numpy(dtype=np.float64),
+            scaler_parameters['feature_names'],
+            scaler_parameters,
+        )
 
         # Create the suffix for the normalised wavelengths
         string_norm = [str(int) + '_norm' for int in input_bands]
 
         # Create the DataFrame with the normalised columns
-        df_norm = pd.DataFrame(data=normalised, columns=string_norm)
+        df_norm = pd.DataFrame(
+            data=normalised,
+            columns=string_norm,
+            index=df.index,
+        )
 
         # Include the additional columns from the input DataFrame and add a column where negative
         df_preprocessed = df_norm.join(df).assign(is_negative=is_negative.astype(int))
@@ -501,43 +654,40 @@ def normalise_input(input_dataset: Union[pd.DataFrame, xr.Dataset], data_type: s
         else:
             print("No standard bands to check for negatives.")
 
-        # Load the normalization scaler for the BNN application (not the same as the standardization for the OWTs)
-        try:
-            scaler_path = f"{cwd_path}/scalers/{scaler_name}_scaler.sav"
-            with open(scaler_path, 'rb') as f:
-                scaler = pickle.load(f)
-        except FileNotFoundError:
-            print(f"Error: The scaler {scaler_path} could not be found. Please verify the path and the scaler name in sensor_meta_info.py")
-            return None
-        
-        # Bands in the xr ds need to match the naming of the columns the scaler was fit on
-        
-        def create_dynamic_band_mapping(scaler_name, sensor):
-            scaling_bands = meta.get_scaler_config(scaler_name)
+        scaler_parameters = load_scaler_parameters(scaler_name, cwd_path)
+        sensor_bands = meta.get_sensor_config(sensor)
+        if len(sensor_bands) != scaler_parameters['n_features']:
+            raise ValueError(
+                f'Sensor {sensor} provides {len(sensor_bands)} model inputs, but '
+                f"scaler {scaler_name} requires {scaler_parameters['n_features']}."
+            )
+        missing_input_bands = [band for band in sensor_bands if band not in ds]
+        if missing_input_bands:
+            raise ValueError(
+                f'Missing required model input variables: {missing_input_bands}.'
+            )
 
-            # Revised band mapping to correspond to dataset labels
-            band_mapping = {}
-            sensor_bands = meta.get_sensor_config(sensor) 
-            for i, band in enumerate(sensor_bands):
-                band_mapping[band] = scaling_bands[i]  # Direct mapping with proper scaling band names
-
-            return band_mapping
-
-        band_mapping = create_dynamic_band_mapping(scaler_name, sensor)
-
-        # Selecting bands and renaming for scaling
-        selected_bands = [band for band in ds.data_vars if band in band_mapping]
-        if not selected_bands:
-            print("No applicable Rrs_ bands found in the dataset.")
-            raise ValueError("No applicable Rrs_ bands found in the dataset.")
+        # Construct model inputs in the stored scaler order, independently of
+        # the order of variables in the source Dataset.
+        selected_bands = list(sensor_bands)
+        band_mapping = dict(
+            zip(selected_bands, scaler_parameters['feature_names'])
+        )
 
         # Prepare data for scale
         stacked_data = ds[selected_bands].to_array(dim='band').stack(pixels=('lat', 'lon')).transpose('pixels', 'band')
         stacked_data_df = stacked_data.to_pandas()
         stacked_data_df.rename(columns=band_mapping, inplace=True)
 
-        # Apply the scaler to a df to make the application explicit.
-        scaled_data_df = pd.DataFrame(scaler.transform(stacked_data_df), columns=stacked_data_df.columns, index=stacked_data_df.index)
+        scaled_data_df = pd.DataFrame(
+            apply_minmax_scaler(
+                stacked_data_df.to_numpy(dtype=np.float64),
+                stacked_data_df.columns,
+                scaler_parameters,
+            ),
+            columns=stacked_data_df.columns,
+            index=stacked_data_df.index,
+        )
 
         # Rename columns back to original band names for adding to dataset
         scaled_data_df.rename(columns={v: k for k, v in band_mapping.items()}, inplace=True)

@@ -1,7 +1,8 @@
 import numpy as np
-import pandas as pd
 from tqdm import tqdm
 tqdm.pandas()
+import os
+os.environ['TF_USE_LEGACY_KERAS'] = '1'
 import tensorflow as tf
 import sensor_meta_info as meta
 import multiprocessing
