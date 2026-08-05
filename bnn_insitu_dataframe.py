@@ -28,33 +28,29 @@ Therefore, users should carefully evaluate the suitability of the model and data
 # Generic imports:
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
+os.environ['TF_USE_LEGACY_KERAS'] = '1'
 import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter
 import pandas as pd
-from tqdm import tqdm
-tqdm.pandas()
-import tensorflow as tf
-import tensorflow_probability as tfp # TFP is a necessary import for the output distribution layer of the pre-trained BNNs
 # Imports specific to this repository:
 import performance_metrics as perf_met
 import uncertainty_calibration_metrics as unc_met
 from data_processing import owt_flagging
 from data_processing import normalise_input
-from model_functions import NLL
+from data_processing import load_bnn_model
 from model_functions import estimate_chla
 from model_functions import calculate_uncertainty
 
 #####
 # 2. Load model and data
 #####
-# If you run into loading problems: make sure the correct Python version is used. 
-# Python version that corresponds to the .h5 Keras models: 3.8.15
+# Use Python 3.12 with the package versions in requirements-python-3.12.txt.
 
 # Use os.path.join() to combine the different components of the path into a single string
 # using forward slashes as the separator/
 # takes your working directory, assuming the same folder structure as in the repository.
 cwd = os.getcwd()
-cwd_system_wide = os.path.join(*cwd.split("/"))
+cwd_system_wide = cwd
 print(cwd_system_wide)
 
 # define sensor to apply the BNNs to (case sensitive):
@@ -62,7 +58,7 @@ sensor_name = 'OLCI_all' # any of: 'OLCI_all', 'OLCI_polymer, 'MSI_s2a', 'MSI_s2
 
 # Load the model
 
-bnn_sensor_model = tf.keras.models.load_model(cwd_system_wide+'/bnns/BNN_'+sensor_name+'.h5', custom_objects = {'NLL': NLL})
+bnn_sensor_model = load_bnn_model(cwd_system_wide+'/bnns/BNN_'+sensor_name+'.h5')
 print(sensor_name + ' BNN model loaded.')
 
 # Load example data:

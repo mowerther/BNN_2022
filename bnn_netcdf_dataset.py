@@ -4,11 +4,7 @@
 
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
-import pandas as pd
-from tqdm import tqdm
-tqdm.pandas()
-import tensorflow as tf
-import tensorflow_probability as tfp # TFP is a necessary import for the output distribution layer of the pre-trained BNNs
+os.environ['TF_USE_LEGACY_KERAS'] = '1'
 
 from data_processing import owt_flagging
 from data_processing import normalise_input
@@ -19,15 +15,14 @@ from data_processing import get_rrs
 from model_functions import estimate_chla
 from model_functions import calculate_uncertainty
 
-# If you run into loading problems: make sure the correct Python version is used. 
-# Python version that corresponds to the .h5 Keras models: 3.8.15
+# Use Python 3.12 with the package versions in requirements-python-3.12.txt.
 
 ######
 # 2. Preparation and loading of models and data
 ######
 
 cwd = os.getcwd()
-cwd_system_wide = os.path.join(*cwd.split("/"))
+cwd_system_wide = cwd
 print(cwd_system_wide)
 
 # Any of: 'OLCI_all', 'OLCI_polymer', 'MSI_s2a', 'MSI_s2b'
